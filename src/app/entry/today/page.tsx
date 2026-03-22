@@ -2,9 +2,9 @@
 
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Music, Clock } from 'lucide-react'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 
-export default function EntryPage() {
+function EntryContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const inkColor = searchParams.get('color') || '#000000'
@@ -192,5 +192,13 @@ export default function EntryPage() {
         }
       `}</style>
     </main>
+  )
+}
+
+export default function EntryPage() {
+  return (
+    <Suspense fallback={<div className="sketch-container items-center justify-center font-sketch text-2xl">Carregando Diário...</div>}>
+      <EntryContent />
+    </Suspense>
   )
 }
