@@ -1,14 +1,48 @@
 'use client'
 
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Music, Clock } from 'lucide-react'
+import { ArrowLeft, Save, Music, Clock, Loader2 } from 'lucide-react'
 import { useState, Suspense } from 'react'
+import { supabase } from '@/lib/supabase'
 
 function EntryContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const inkColor = searchParams.get('color') || '#000000'
   const [content, setContent] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!content.trim()) return
+
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        alert('Você precisa estar logado para salvar seu diário!')
+        router.push('/auth/login')
+        return
+      }
+
+      const { error } = await supabase
+        .from('entries')
+        .insert({
+          user_id: user.id,
+          content,
+          ink_color: inkColor
+        })
+
+      if (error) throw error
+
+      alert('Sua história foi guardada no livro de memórias! ✨')
+      router.push('/dashboard')
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <main className="sketch-container paper-page font-sketch">
@@ -79,9 +113,16 @@ function EntryContent() {
             <Music className="w-4 h-4" /> 
             <span>Tocando: Humorphonic - Rainy Day</span>
           </div>
-          <button className="btn-save shadow-sketch" style={{ backgroundColor: inkColor }}>
-            <Save className="w-5 h-5" /> 
-            <span>Salvar no Livro</span>
+          <button 
+            className="btn-save shadow-sketch" 
+            style={{ backgroundColor: inkColor }} 
+            onClick={handleSave}
+            disabled={saving}
+          >
+            <div className={saving ? 'animate-spin' : ''}>
+              {saving ? <Loader2 className="w-5 h-5" /> : <Save className="w-5 h-5" />}
+            </div>
+            <span>{saving ? 'Guardando...' : 'Salvar no Livro'}</span>
           </button>
         </footer>
 

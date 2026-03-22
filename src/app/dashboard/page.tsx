@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   PenTool, Paperclip, Palette, ArrowRight, Music, Sparkles, 
-  X, Layout, PenLine, Settings, Check, Clock, Anchor, Coffee
+  X, Layout, PenLine, Settings, Check, Clock, Anchor, Coffee, Loader2
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -19,30 +20,62 @@ export default function DashboardPage() {
   const [deskTexture, setDeskTexture] = useState('Wood')
   const [penStyle, setPenStyle] = useState('Quill')
   const [accessory, setAccessory] = useState('Paperclip')
+  
+  // App States
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
 
   // Menu States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('desk')
 
   useEffect(() => {
-    // Load all personalized settings
-    const savedMood = localStorage.getItem('diario_mood')
-    const savedDesign = localStorage.getItem('diario_design')
-    const savedColor = localStorage.getItem('diario_color')
-    const savedDesk = localStorage.getItem('diario_desk')
-    const savedPen = localStorage.getItem('diario_pen')
-    const savedAcc = localStorage.getItem('diario_accessory')
-    const savedInkName = localStorage.getItem('diario_ink_name')
-    const savedInkColor = localStorage.getItem('diario_ink_color')
-    
-    if (savedMood) setMood(savedMood)
-    if (savedDesign) setDiaryDesign(savedDesign)
-    if (savedColor) setDiaryColor(savedColor)
-    if (savedDesk) setDeskTexture(savedDesk)
-    if (savedPen) setPenStyle(savedPen)
-    if (savedAcc) setAccessory(savedAcc)
-    if (savedInkName && savedInkColor) setSelectedInk({ name: savedInkName, color: savedInkColor })
-  }, [])
+    async function loadSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        router.push('/auth/login')
+        return
+      }
+
+      setUser(session.user)
+      
+      // Load from Supabase
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+
+      if (data) {
+        setMood(data.mood)
+        setDiaryDesign(data.diary_design)
+        setDiaryColor(data.diary_color)
+        setDeskTexture(data.desk_texture)
+        setPenStyle(data.pen_style)
+        setAccessory(data.accessory)
+        setSelectedInk({ name: data.ink_name, color: data.ink_color })
+      } else if (error && error.code === 'PGRST116') {
+        // No settings yet, create defaults
+        const defaults = {
+          id: session.user.id,
+          mood: 'Zen',
+          diary_design: 'Clássico',
+          diary_color: '#ef4444',
+          desk_texture: 'Wood',
+          pen_style: 'Quill',
+          accessory: 'Paperclip',
+          ink_name: 'Preto',
+          ink_color: '#000000'
+        }
+        await supabase.from('user_settings').insert(defaults)
+      }
+      
+      setLoading(false)
+    }
+
+    loadSession()
+  }, [router])
 
   const inkColors = [
     { name: 'Preto', color: '#000000' },
@@ -95,14 +128,31 @@ export default function DashboardPage() {
     }, 1200)
   }
 
-  const saveToLocal = (key: string, value: string) => {
-    localStorage.setItem(key, value)
-  }
-
-  // Handle Updates
-  const updateSetting = (key: string, value: string, setter: (v: string) => void) => {
+  // Handle Updates to Supabase
+  const updateSetting = async (key: string, value: any, setter: (v: any) => void) => {
     setter(value)
-    saveToLocal(`diario_${key}`, value)
+    
+    if (!user) return
+
+    // Map frontend keys to DB column names if necessary
+    const dbKeyMap: Record<string, string> = {
+      'desk': 'desk_texture',
+      'pen': 'pen_style',
+      'accessory': 'accessory',
+      'mood': 'mood',
+      'design': 'diary_design',
+      'color': 'diary_color',
+      'ink_name': 'ink_name',
+      'ink_color': 'ink_color'
+    }
+
+    const dbKey = dbKeyMap[key] || key
+    
+    await supabase.from('user_settings').upsert({
+      id: user.id,
+      [dbKey]: value,
+      updated_at: new Date().toISOString()
+    })
   }
 
   // Helper to determine desk background
@@ -115,6 +165,15 @@ export default function DashboardPage() {
       'Paper': 'https://www.transparenttextures.com/patterns/natural-paper.png'
     }
     return textures[deskTexture] || textures['Wood']
+  }
+
+  if (loading) {
+    return (
+      <div className="min-height-100vh bg-slate-100 flex items-center justify-center flex-col gap-4 font-sketch">
+        <Loader2 className="w-12 h-12 text-amber-600 animate-spin" />
+        <p className="text-xl text-slate-500">Organizando sua Escrivaninha...</p>
+      </div>
+    )
   }
 
   return (
@@ -324,9 +383,8 @@ export default function DashboardPage() {
                 key={ink.name}
                 className={`inkwell-desk ${selectedInk.name === ink.name ? 'selected' : ''}`}
                 onClick={() => {
-                   setSelectedInk(ink)
-                   saveToLocal('diario_ink_name', ink.name)
-                   saveToLocal('diario_ink_color', ink.color)
+                   updateSetting('ink_name', ink.name, () => {})
+                   updateSetting('ink_color', ink.color, (color) => setSelectedInk({ name: ink.name, color }))
                 }}
               >
                 <div className="ink-label-desk">{ink.name}</div>

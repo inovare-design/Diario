@@ -1,7 +1,48 @@
-import { Lock, Mail, User, ArrowRight } from 'lucide-react'
+'use client'
+
+import { Lock, Mail, User, ArrowRight, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 export default function SignupPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [username, setUsername] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username: username || email.split('@')[0],
+          }
+        }
+      })
+
+      if (authError) throw authError
+
+      if (data.user) {
+        // Success! Redirect to login or dashboard
+        router.push('/dashboard')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar conta. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <main className="auth-container">
       <div className="glass auth-card animate-fade-in">
@@ -10,7 +51,14 @@ export default function SignupPage() {
           <p className="auth-subtitle">Crie sua conta e comece a escrever hoje.</p>
         </div>
 
-        <form className="auth-form">
+        {error && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 flex items-start gap-3 animate-shake font-sketch">
+            <AlertCircle className="w-5 h-5 mt-0.5" />
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+
+        <form className="auth-form" onSubmit={handleSignup}>
           <div className="form-group">
             <label className="form-label">Nome de Usuário</label>
             <div className="input-wrapper">
@@ -19,6 +67,9 @@ export default function SignupPage() {
                 type="text" 
                 className="form-input"
                 placeholder="ex: jose_escritor"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
               />
             </div>
           </div>
@@ -31,6 +82,9 @@ export default function SignupPage() {
                 type="email" 
                 className="form-input"
                 placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
           </div>
@@ -43,13 +97,16 @@ export default function SignupPage() {
                 type="password" 
                 className="form-input"
                 placeholder="Escolha uma senha forte"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
           </div>
 
-          <button className="btn-primary auth-submit">
-            Criar meu Diário
-            <ArrowRight className="w-5 h-5 ml-2" />
+          <button type="submit" className="btn-primary auth-submit" disabled={loading}>
+            {loading ? 'Criando conta...' : 'Criar meu Diário'}
+            {!loading && <ArrowRight className="w-5 h-5 ml-2" />}
           </button>
         </form>
 
